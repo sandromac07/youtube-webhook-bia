@@ -39,8 +39,8 @@ def youtube_webhook():
                         url = f"https://www.youtube.com/watch?v={v_id}"
                         
                         requests.post(DISCORD_WEBHOOK_URL, json={
-                            "content": f"🚨 **VÍDEO NOVO!** \n{url}",
-                            "username": "Radar da B.ia"
+                            "content": f"Fala galera!\nTem conteudo novo no canal, bora dar aquela conferida?\nMas já chega de voadora no like pra ajudar!👇\n@everyone\n\n{url}",
+                            "username": "B.ia"
                         })
                         
                         # Adiciona à lista e mantém apenas os últimos 10 IDs para não encher a memória
