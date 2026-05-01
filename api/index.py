@@ -5,40 +5,48 @@ from datetime import datetime, timezone
 
 app = Flask(__name__)
 
-# Substitua pelo seu Webhook real
 DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1499800335412236379/4_Hiz0r3U1pG_9OpAwzSMzb9f1pLKGBAK3VU4PMfZ2dcRKDXTSm5sYBI5qVn2wmY--j4"
 
+# Memória temporária para evitar duplicatas no mesmo ciclo de execução
+processados = []
+
 @app.route('/', methods=['GET', 'POST'])
-def index():
+def youtube_webhook():
+    global processados
+    
     if request.method == 'GET':
-        # Verificação do PubSubHubbub
         challenge = request.args.get('hub.challenge')
-        if challenge:
-            return challenge, 200
-        return "Posto de Escuta Online! 🚛", 200
+        return challenge if challenge else "Posto Online! 🚛", 200
 
     if request.method == 'POST':
         try:
             xml_data = request.data.decode('utf-8')
-            video_id = re.search(r'<yt:videoId>(.*?)</yt:videoId>', xml_data)
-            pub_date_str = re.search(r'<published>(.*?)</published>', xml_data)
+            video_id_match = re.search(r'<yt:videoId>(.*?)</yt:videoId>', xml_data)
+            pub_match = re.search(r'<published>(.*?)</published>', xml_data)
 
-            if video_id and pub_date_str:
-                v_id = video_id.group(1)
-                # Normaliza a data para o Python entender
-                p_date = datetime.fromisoformat(pub_date_str.group(1).replace('Z', '+00:00'))
+            if video_id_match and pub_match:
+                v_id = video_id_match.group(1)
+                p_date_str = pub_match.group(1).replace('Z', '+00:00')
+                p_date = datetime.fromisoformat(p_date_str)
                 agora = datetime.now(timezone.utc)
-                
-                # Só dispara se o vídeo tiver menos de 1 hora (3600 segundos)
-                if (agora - p_date).total_seconds() < 3600:
-                    url = f"https://www.youtube.com/watch?v={v_id}"
-                    requests.post(DISCORD_WEBHOOK_URL, json={
-                        "content": f"🚨 **VÍDEO NOVO!** \n{url}",
-                        "username": "Radar da B.ia"
-                    })
+
+                # 1. Filtro de Tempo mais rígido (apenas vídeos com menos de 10 minutos)
+                # Isso mata os vídeos de 2 semanas atrás de vez.
+                if (agora - p_date).total_seconds() < 600:
+                    
+                    # 2. Filtro de ID (Se já processou esse ID agora, ignora)
+                    if v_id not in processados:
+                        url = f"https://www.youtube.com/watch?v={v_id}"
+                        
+                        requests.post(DISCORD_WEBHOOK_URL, json={
+                            "content": f"🚨 **VÍDEO NOVO!** \n{url}",
+                            "username": "Radar da B.ia"
+                        })
+                        
+                        # Adiciona à lista e mantém apenas os últimos 10 IDs para não encher a memória
+                        processados.append(v_id)
+                        processados = processados[-10:]
+            
             return "OK", 200
         except Exception as e:
-            print(f"Erro no processamento: {e}")
-            return "Erro Interno", 200 # Retornamos 200 para o Google não ficar tentando reenviar erro
-
-# IMPORTANTE: Para a Vercel, o objeto 'app' deve estar no escopo global.
+            return f"Erro: {e}", 200 # Retorna 200 para o Google não reenviar o erro
